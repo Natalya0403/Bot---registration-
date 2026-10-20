@@ -13,7 +13,23 @@ from db.models import User, Lesson
 
 async def create_user(name: str, email: str, city: str, birth: str, phone: str, user_id: int):
     async with async_session() as session:
-        user = User(user_id=user_id, name=name, email=email, city=city, birth=birth, phone=phone)
+        stmt = select(User).where(User.user_id == user_id)
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            user.name = name
+            user.email = email
+            user.city = city
+            user.birth = birth
+            user.phone = phone
+        else:
+            user = User(
+                user_id=user_id,
+                name=name,
+                email=email,
+                city=city,
+                birth=birth,
+                phone=phone)
         session.add(user)
         await session.commit()
         await session.refresh(user)
