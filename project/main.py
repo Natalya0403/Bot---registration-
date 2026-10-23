@@ -35,7 +35,10 @@ async def main() -> None:
 
     dp.include_router(routes.router)
 
-    await bot.set_my_commands([])
+    await bot.set_my_commands([BotCommand(command="start", description="Перезапустить бота"),
+                               BotCommand(command="calendar", description="Запись на уроки"),
+                               BotCommand(command="profile", description="Личный кабинет"),
+                               BotCommand(command="admin", description="Панель администратора")])
     asyncio.create_task(send_reminder(bot))
 
     try:

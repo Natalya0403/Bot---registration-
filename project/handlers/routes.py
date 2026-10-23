@@ -1,3 +1,4 @@
+import logging
 import re
 import os
 import json
@@ -6,11 +7,13 @@ import httpx
 from dotenv import load_dotenv
 
 from aiogram import Router, F
-from aiogram.types import Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton, CallbackQuery,InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (Message, FSInputFile, ReplyKeyboardMarkup, KeyboardButton,
+                           CallbackQuery,InlineKeyboardButton, InlineKeyboardMarkup,
+                           ReplyKeyboardRemove)
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, BaseFilter
 from project.forms import Registration, EditProfile, AddLesson
-from aiogram3_calendar import SimpleCalendar
+
 
 
 load_dotenv()
@@ -30,6 +33,25 @@ BASE_DIR = Path(__file__).resolve().parent
 PHOTO_PATH = BASE_DIR / "media" / "foto.jpg"
 
 router = Router()
+
+cancel_keyboard = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="❌ Отмена")]],
+    resize_keyboard=True
+)
+# Глобальный хэндлер на отмену (ловит и команду /cancel, и кнопку "❌ Отмена")
+@router.message(Command("cancel"))
+@router.message(F.text == "❌ Отмена")
+async def cancel_registration(message: Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is None:
+        await message.answer("Вы не находитесь в процессе регистрации.", reply_markup=ReplyKeyboardRemove())
+        return
+
+    await state.clear()
+    await message.answer(
+        "❌ Регистрация отменена. Вы можете начать заново командой /start или посмотреть расписание через /calendar.",
+        reply_markup=ReplyKeyboardRemove() # Убирает клавиатуру отмены с экрана
+    )
 @router.message(Command('start'))
 async def send_welcome(message: Message, state: FSMContext):
     await state.clear()  # Сбрасываем старые состояния при /start
@@ -38,63 +60,74 @@ async def send_welcome(message: Message, state: FSMContext):
         foto = FSInputFile(PHOTO_PATH)
         await message.answer_photo(
             photo=foto,
-            caption='👋 Привет! Это бот для записи на занятие в школу программирования IT_School_niv.\n\nЧтобы зарегистрироваться ответьте на несколько вопросов.\n\nПоехали! Как вас зовут?'
-        )
+            caption='👋 Привет! Это бот для записи на занятие в школу программирования IT_Start.\n\nЧтобы зарегистрироваться ответьте на несколько вопросов.\n\nПоехали! Как вас зовут?',
+        reply_markup=cancel_keyboard)
     else:
         await message.answer(
-            '👋 Привет! Это бот для записи на занятие в школу программирования IT_School_niv.\n\nЧтобы зарегистрироваться ответьте на несколько вопросов.\n\nПоехали! Как вас зовут?')
+            '👋 Привет! Это бот для записи на занятие в школу программирования IT_Start.\n\nЧтобы зарегистрироваться ответьте на несколько вопросов.\n\nПоехали! Как вас зовут?',
+            reply_markup=cancel_keyboard  # 👈 Добавили кнопку отмены
+        )
 
     await state.set_state(Registration.name)
 
 
-@router.message(Registration.name)
+@router.message(Registration.name, ~F.text.startswith("/"))
 async def get_name(message: Message, state: FSMContext):
     name = message.text.strip()
+
+    # Простейшая проверка на клиенте: хотя бы 2 символа и отсутствие явного мусора
+    if len(name) < 2 or not re.match(r"^[А-Яа-яA-Za-zЁё\s\-]+$", name):
+        await message.answer(
+            '⚠️ Имя должно содержать минимум 2 буквы и состоять только из букв. Попробуйте еще раз:',
+            reply_markup=cancel_keyboard
+        )
+        return
+
     await state.update_data(name=name)
-    await message.answer(f'🤝 Отлично, {name}!\nТеперь введи свой email:')
+    await message.answer(f'🤝 Отлично, {name}!\nТеперь введи свой email:', reply_markup=cancel_keyboard)
     await state.set_state(Registration.email)
 
 
-@router.message(Registration.email)
+@router.message(Registration.email, ~F.text.startswith("/"))
 async def get_email(message: Message, state: FSMContext):
     email = message.text.strip()
     if '@' not in email or '.' not in email:
-        await message.answer('⚠️ Это не похоже на email. Попробуйте еще раз.')
+        await message.answer('⚠️ Это не похоже на email. Попробуйте еще раз.', reply_markup=cancel_keyboard)
         return
     await state.update_data(email=email)
-    await message.answer('🏙️ Супер! Из какого ты города?')
+    await message.answer('🏙️ Супер! Из какого ты города?', reply_markup=cancel_keyboard)
     await state.set_state(Registration.city)
 
 
-@router.message(Registration.city)
+@router.message(Registration.city, ~F.text.startswith("/"))
 async def get_city(message: Message, state: FSMContext):
     city = message.text.strip()
     await state.update_data(city=city)
     await message.answer(
-        '🎂 Спасибо!\nОсталось еще немного...\nКогда у тебя день рождения?\nВведите дату в формате: 01.01.2000'
+        '🎂 Спасибо!\nОсталось еще немного...\nКогда у тебя день рождения?\nВведите дату в формате: 01.01.2000', reply_markup=cancel_keyboard
     )
     await state.set_state(Registration.birth)
 
 
-@router.message(Registration.birth)
+@router.message(Registration.birth, ~F.text.startswith("/"))
 async def get_birth(message: Message, state: FSMContext):
     birth = message.text.strip()
     if len(birth) != 10 or birth.count('.') != 2:
-        await message.answer('📅 Введите дату рождения в формате: 01.01.2000')
+        await message.answer('📅 Введите дату рождения в формате: 01.01.2000', reply_markup=cancel_keyboard)
         return
     await state.update_data(birth=birth)
 
-    await message.answer('📱 И финальный шаг!\nВведите пожалуйста номер телефона:')
+    await message.answer('📱 И финальный шаг!\nВведите пожалуйста номер телефона:', reply_markup=cancel_keyboard)
     await state.set_state(Registration.phone)
 
 
-@router.message(Registration.phone)
+@router.message(Registration.phone, ~F.text.startswith("/"))
 async def get_phone(message: Message, state: FSMContext):
     phone_raw = message.text.strip()
     clean_phone = re.sub(r'\D', '', phone_raw)
 
     if len(clean_phone) < 10 or len(clean_phone) > 15:
-        await message.answer('❌ Введите корректный номер телефона')
+        await message.answer('❌ Введите корректный номер телефона', reply_markup=cancel_keyboard)
         return
 
     await state.update_data(phone=clean_phone)
@@ -127,28 +160,53 @@ async def get_phone(message: Message, state: FSMContext):
 @router.message(Registration.confirm)
 async def get_confirm(message: Message, state: FSMContext):
     if message.text == 'Да, всё верно ✅':
-        # Присваиваем результат вызова функции в переменную user_data
         user_data = await state.get_data()
         user_data['user_id'] = message.from_user.id
 
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(f'{API_URL}/user/add', json=user_data)
-                if response.status_code == 200 or response.status_code == 201:
-                    await message.answer('🎉 Спасибо за регистрацию! Мы с вами свяжемся.')
-                    await state.clear()  # Очищаем FSM после успешной записи
+
+                if response.status_code in (200, 201):
+                    await message.answer('🎉 Спасибо за регистрацию! Мы с вами свяжемся.',
+                                         reply_markup=ReplyKeyboardRemove())
+                    await state.clear()
+
+                elif response.status_code == 422:
+                    # Ловим ошибку валидации Pydantic с бэкенда
+                    try:
+                        err_data = response.json()
+                        detail = err_data.get('detail', 'Неверный формат данных.')
+                    except Exception:
+                        detail = 'Проверьте правильность введенных данных.'
+
+                    await message.answer(
+                        f'⚠️ Ошибка проверки данных: {detail}\n\nПожалуйста, начните регистрацию заново с команды /start',
+                        reply_markup=ReplyKeyboardRemove()
+                    )
+                    await state.clear()
+
                 else:
-                    await message.answer(f'⚠️ Ошибка сервера ({response.status_code}). Попробуйте позже.')
+                    await message.answer(f'⚠️ Ошибка сервера ({response.status_code}). Попробуйте позже.',
+                                         reply_markup=ReplyKeyboardRemove())
+                    await state.clear()
+
             except httpx.RequestError:
-                await message.answer('⚠️ Не удалось связаться с сервером API. Проверьте, запущен ли FastAPI.')
-    else:
+                await message.answer('⚠️ Не удалось связаться с сервером API. Проверьте, запущен ли FastAPI.',
+                                     reply_markup=ReplyKeyboardRemove())
+                await state.clear()
 
-        await message.answer("Окей! Давай начнём заново 🌀\nНапиши своё имя:")
+    elif message.text == 'Заполнить заново ❌':
+        await message.answer("Окей! Давай начнём заново 🌀\nНапиши своё имя:", reply_markup=cancel_keyboard)
         await state.set_state(Registration.name)
-    await state.clear()  # Сбрасываем старый ввод
+    else:
+        # Если пользователь написал что-то постороннее на этапе подтверждения
+        await message.answer("Пожалуйста, выберите вариант с помощью кнопок ниже 👇")
 
-@router.message(F.text == "/calendar")
-async def show_calendar(message: Message):
+@router.message(Command("calendar"))
+async def show_calendar(message: Message, state: FSMContext):
+    await state.clear()# 👈 Сбрасываем любые зависшие состояния FSM
+
     async with httpx.AsyncClient() as client:
         res = await client.get(f"{API_URL}/lessons")
         lessons = res.json()
@@ -159,27 +217,33 @@ async def show_calendar(message: Message):
 
     buttons = []
     for lesson in lessons:
-        label = f"{lesson['date']} ({lesson['spots']} мест)"
-        btn = InlineKeyboardButton(text=label, callback_data=f"choose_date|{lesson['date']}")
+        label = f"{lesson['title']} | {lesson['date']} ({lesson['spots']} мест)"
+        btn = InlineKeyboardButton(
+            text=label, callback_data=f"register_lesson:{lesson['id']}"
+        )
         buttons.append([btn])
 
     kb = InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.answer("Выберите дату, чтобы записаться на занятие 👇", reply_markup=kb)
 
 
-@router.callback_query(F.data.startswith("choose_date"))
-async def register_on_date(callback: CallbackQuery):
-    date_str = callback.data.split("|")[1]
+@router.callback_query(F.data.startswith("register_lesson"))
+async def register_on_lesson_id(callback: CallbackQuery):
+    # Достаем lesson_id из callback_data (например, "register_lesson:15" -> 15)
+    lesson_id= callback.data.split(":")[1]
     user_id = callback.from_user.id
 
     async with httpx.AsyncClient() as client:
-        res = await client.post(f"{API_URL}/lesson/register/{date_str}/{user_id}")
+        res = await client.post(f"{API_URL}/lesson/register/{lesson_id}/{user_id}")
         data = res.json()
 
     if data["status"] == "ok":
-        await callback.message.answer("🎉 Вы успешно записались на занятие!")
+        await callback.message.answer("🎉 Вы успешно записались на занятие!",parse_mode="HTML")
     else:
-        await callback.message.answer("❌ К сожалению, мест на эту дату больше нет.")
+        error_detail = data.get(
+            "detail", "К сожалению, мест нет или вы уже записаны."
+        )
+        await callback.message.edit_text(f"❌ {error_detail}", parse_mode="HTML")
 
     await callback.answer()
 
@@ -234,7 +298,7 @@ async def cancel_lesson_callback(callback: CallbackQuery):
 
     await callback.answer()
 #=========================================================================================
-@router.message(Command("edit_profile"))
+@router.callback_query(F.data == "edit_profile")
 async def choose_field(callback: CallbackQuery):
     buttons = [
         [InlineKeyboardButton(text="Имя", callback_data="edit_field|name")],
@@ -247,48 +311,120 @@ async def choose_field(callback: CallbackQuery):
     await callback.message.answer('Что вы хотите изменить?', reply_markup=kb)
     await callback.answer()
 
-@router.message(F.data.startswith("edit_field"))
+
+# Описываем читаемые названия полей в отдельном словаре
+FIELD_NAMES = {
+    "name": "имя",
+    "email": "email",
+    "city": "город",
+    "birth": "дату рождения",
+    "phone": "номер телефона",
+}
+
+
+@router.callback_query(F.data.startswith("edit_field"))
 async def edit_field(callback: CallbackQuery, state: FSMContext):
-    field = callback.data.split("|")[1]
+    # Разделяем Callback Data (ожидается формат "edit_field|name")
+    parts = callback.data.split("|")
+    if len(parts) < 2:
+        await callback.answer("Ошибка: неверный формат данных", show_alert=True)
+        return
+
+    field = parts[1]
     await state.update_data(field=field)
-    await callback.message.answer('Введите новое значение?')
+
+    target_name = FIELD_NAMES.get(field, 'новое значение')
+
+    await callback.message.answer(f'Введите новое значение для поля ({target_name}):')
     await state.set_state(EditProfile.new_value)
     await callback.answer()
+
 
 @router.message(EditProfile.new_value)
 async def save_new_value(message: Message, state: FSMContext):
     data = await state.get_data()
-    field = data['field']
-    value = message.text.strip()
+    field = data.get('field')
 
-    async with httpx.AsyncClient() as client:
-        res = await client.put(f"{API_URL}/users/{message.from_user.id}",json={field: value})
+    if not field:
+        await message.answer(
+            'Произошла ошибка сессии. Пожалуйста, выберите поле заново.',
+            reply_markup=ReplyKeyboardRemove()
+        )
+        await state.clear()
+        return
 
-        if res.status_code == 200:
-            await message.answer('Вы успешно отредактировали!')
-        else:
-            await message.answer('К сожалению не удалось. Попробуйте позже')
-    await state.clear()
+    value = message.text.strip() if message.text else ''
+    user_id = message.from_user.id
 
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            # 1. Получаем текущий профиль
+            res_get = await client.get(f'{API_URL}/users/{user_id}')
+            if res_get.status_code != 200:
+                await message.answer('Не удалось получить данные профиля.', reply_markup=ReplyKeyboardRemove())
+                await state.clear()
+                return
+
+            user_data = res_get.json()
+            user_data[field] = value
+            user_data['user_id'] = user_id
+
+            # 2. Отправляем обновленную пачку данных
+            res_put = await client.put(f'{API_URL}/users/{user_id}', json=user_data)
+
+            if res_put.status_code == 200:
+                await message.answer('🎉 Профиль успешно обновлен!', reply_markup=ReplyKeyboardRemove())
+                await state.clear()
+
+            elif res_put.status_code == 422:
+                # Пытаемся забрать детальный текст ошибки от Pydantic/FastAPI
+                try:
+                    err_data = res_put.json()
+                    detail = err_data.get('detail', 'Неверный формат данных.')
+                except Exception:
+                    detail = 'Проверьте правильность введенных данных.'
+
+                # Выводим ошибку, но состояние НЕ очищаем (!),
+                # чтобы пользователь мог сразу отправить правильный вариант
+                await message.answer(
+                    f'⚠️ Ошибка проверки: {detail}\n\nПожалуйста, введите корректное значение заново:',
+                    reply_markup=cancel_keyboard
+                )
+
+            else:
+                await message.answer('❌ Не удалось обновить профиль.', reply_markup=ReplyKeyboardRemove())
+                await state.clear()
+
+        except httpx.RequestError:
+            await message.answer('⚠️ Ошибка соединения с сервером.', reply_markup=ReplyKeyboardRemove())
+            await state.clear()
 # Admin панель===============================================================================
-@router.message(Command("admin"),IsAdmin())
+# Admin панель ===============================================================================
+
+@router.message(Command("admin"), IsAdmin())
 async def admin_panel(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📅 Добавить урок", callback_data="admin_add")],
-        [InlineKeyboardButton(text="👥 Кто записан?", callback_data="admin_check")]
+        [InlineKeyboardButton(text="👥 Все уроки и записи", callback_data="admin_check")]
     ])
-    await message.answer("👨‍💼 Панель администратора",reply_markup=kb)
+    await message.answer("👨‍💼 Панель администратора", reply_markup=kb)
 
-@router.callback_query(F.data=='admin_add', IsAdmin())
+
+# --- Добавление урока ---
+
+@router.callback_query(F.data == 'admin_add', IsAdmin())
 async def admin_add_lesson(callback: CallbackQuery, state: FSMContext):
-    await callback.message.answer('Введите название урока')
+    await callback.message.answer('Введите название урока:')
     await state.set_state(AddLesson.title)
     await callback.answer()
+
+
 @router.message(AddLesson.title, IsAdmin())
 async def add_title(message: Message, state: FSMContext):
     await state.update_data(title=message.text.strip())
-    await message.answer('Введите дату урока(в формате ГГГГ-ММ-ДД)')
+    await message.answer('Введите дату урока (в формате ГГГГ-ММ-ДД):')
     await state.set_state(AddLesson.date)
+
 
 @router.message(AddLesson.date, IsAdmin())
 async def add_date(message: Message, state: FSMContext):
@@ -296,19 +432,22 @@ async def add_date(message: Message, state: FSMContext):
     await message.answer('Сколько мест доступно?')
     await state.set_state(AddLesson.spots)
 
+
 @router.message(AddLesson.spots, IsAdmin())
 async def add_spots(message: Message, state: FSMContext):
     if not message.text.isdigit():
-        await message.answer('Введите количество мест числом')
+        await message.answer('Введите количество мест числом:')
         return
-    await state.update_data(spots=message.text.strip())
-    await message.answer('Добавьте ссылку на урок.')
+    await state.update_data(spots=int(message.text.strip()))
+    await message.answer('Добавьте ссылку на урок:')
     await state.set_state(AddLesson.link)
+
 
 @router.message(AddLesson.link, IsAdmin())
 async def add_link(message: Message, state: FSMContext):
     await state.update_data(link=message.text.strip())
     data = await state.get_data()
+
     async with httpx.AsyncClient() as client:
         res = await client.post(f"{API_URL}/lesson/add", json=data)
 
@@ -316,68 +455,92 @@ async def add_link(message: Message, state: FSMContext):
             await message.answer("✅ Урок успешно добавлен!")
         else:
             await message.answer("❌ Ошибка при добавлении урока.")
-        await state.clear()
+
+    await state.clear()
 
 
+# --- Просмотр всех уроков и удаление ---
+
+# 1. Вывод списка всех уроков
 @router.callback_query(F.data == "admin_check", IsAdmin())
-async def ask_date(callback: CallbackQuery):
-    await callback.message.answer("Введите дату (ГГГГ-ММ-ДД), чтобы узнать, кто записан:")
-    await callback.answer()
-    await callback.message.delete()
-
-
-@router.message(F.text.regexp(r"^\d{4}-\d{2}-\d{2}$"), IsAdmin())
-async def show_registrations(message: Message):
-    date_str = message.text.strip()
-
+async def admin_list_lessons(callback: CallbackQuery):
     async with httpx.AsyncClient() as client:
         try:
-            res = await client.get(f"{API_URL}/admin/lesson/{date_str}")
-
-            # Проверяем успешность ответа сервера
-            if res.status_code != 200:
-                await message.answer(f"⚠️ Ошибка сервера API ({res.status_code}).")
-                return
-
+            res = await client.get(f"{API_URL}/admin/lessons/all")
             data = res.json()
-
-        except httpx.RequestError:
-            await message.answer("⚠️ Не удалось связаться с сервером API.")
-            return
-        except json.decoder.JSONDecodeError:
-            await message.answer("⚠️ Получен некорректный ответ от сервера.")
+        except Exception:
+            await callback.message.answer("⚠️ Ошибка связи с сервером.")
+            await callback.answer()
             return
 
-    # Проверяем статус ответа бэкенда
-    if data.get("status") != "ok" or not data.get("lesson"):
-        await message.answer("❌ Уроков на эту дату не найдено.")
+    lessons = data.get("lessons", [])
+    if not lessons:
+        await callback.message.edit_text("📭 Список уроков пуст.")
+        await callback.answer()
         return
 
-    lessons_list = data["lesson"]  # Это список уроков за указанную дату
+    buttons = []
+    for lesson in lessons:
+        btn_text = f"📅 {lesson['title']} | {lesson['date']} (мест: {lesson['spots']})"
+        buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"admin_view_lesson:{lesson['id']}")])
 
-    # Проходимся циклом по каждому уроку за этот день
-    for lesson in lessons_list:
-        users = lesson.get("users", [])
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await callback.message.edit_text("📋 Выберите урок, чтобы посмотреть участников или удалить его:", reply_markup=kb)
+    await callback.answer()
 
-        text = (
-            f"<b>📅 {lesson['title']} — {lesson['date']}</b>\n"
-            f"🪑 Осталось мест: {lesson['spots']}\n"
-            f"🔗 Ссылка: {lesson.get('link') or 'нет'}\n\n"
-        )
 
-        if not users:
-            text += "👤 Никто не записан."
+# 2. Детальная карточка выбранного урока + список участников
+@router.callback_query(F.data.startswith("admin_view_lesson"), IsAdmin())
+async def admin_view_lesson_detail(callback: CallbackQuery):
+    lesson_id = callback.data.split(":")[1]
+
+    async with httpx.AsyncClient() as client:
+        res = await client.get(f"{API_URL}/admin/lesson/id/{lesson_id}")
+        if res.status_code != 200:
+            await callback.answer("Урок не найден или был удален", show_alert=True)
+            return
+        data = res.json()
+
+    lesson = data.get("lesson")
+    users = lesson.get("users", [])
+
+    text = (
+        f"<b>📅 {lesson['title']} — {lesson['date']}</b>\n"
+        f"🪑 Доступно мест: {lesson['spots']}\n"
+        f"🔗 Ссылка: {lesson.get('link') or 'нет'}\n\n"
+    )
+
+    if not users:
+        text += "👤 Никто не записан."
+    else:
+        text += "👥 Записанные пользователи:\n"
+        for u in users:
+            name = u.get("name", "Без имени")
+            email = u.get("email", "нет email")
+            tg_id = u.get("user_id", "—")
+            text += f"• <b>{name}</b> (ID: <code>{tg_id}</code>) | {email}\n"
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="❌ Удалить этот урок", callback_data=f"admin_delete_lesson:{lesson['id']}")],
+        [InlineKeyboardButton(text="« Назад к списку уроков", callback_data="admin_check")]
+    ])
+
+    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+
+# 3. Обработчик удаления урока
+@router.callback_query(F.data.startswith("admin_delete_lesson"), IsAdmin())
+async def admin_delete_lesson_action(callback: CallbackQuery):
+    lesson_id = callback.data.split(":")[1]
+
+    async with httpx.AsyncClient() as client:
+        res = await client.delete(f"{API_URL}/admin/lesson/{lesson_id}")
+        if res.status_code == 200:
+            await callback.answer("✅ Урок успешно удален!", show_alert=True)
+            # Автоматически обновляем список уроков
+            await admin_list_lessons(callback)
         else:
-            text += "👥 Записанные пользователи:\n"
-            for u in users:
-                # Безопасно получаем данные пользователя (.get защищает от KeyError)
-                name = u.get("name", "Без имени")
-                email = u.get("email", "нет email")
-                tg_id = u.get("user_id", "—")
-
-                text += f"• <b>{name}</b> (ID: <code>{tg_id}</code>) | {email}\n"
-
-        await message.answer(text, parse_mode="HTML")
-
+            await callback.answer("❌ Не удалось удалить урок.", show_alert=True)
 
 
