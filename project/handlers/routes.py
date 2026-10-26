@@ -12,8 +12,8 @@ from aiogram.types import (Message, FSInputFile, ReplyKeyboardMarkup, KeyboardBu
                            ReplyKeyboardRemove)
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, BaseFilter
-from project.forms import Registration, EditProfile, AddLesson
-
+from project.forms import Registration, EditProfile, AddLesson, EditLesson
+from aiogram.types import LinkPreviewOptions
 
 
 load_dotenv()
@@ -261,20 +261,31 @@ async def profile(message: Message):
         profile_text = (
             f"<b>👤 Личный кабинет</b>\n\n"
             f"<b>Имя:</b> {user['name']}\n"
-            f"<b>Email:</b> {user['email']}\n"
-            f"<b>Город:</b> {user['city']}\n"
-            f"<b>Дата рождения:</b> {user['birth']}\n"
-            f"<b>Телефон:</b> {user['phone']}\n"
+            f"<b>📧 Email:</b> {user['email']}\n"
+            f"<b>🏙 Город:</b> {user['city']}\n"
+            f"<b>🎂 Дата рождения:</b> {user['birth']}\n"
+            f"<b>📱 Телефон:</b> {user['phone']}\n\n"  # Пустая строка перед записями
+            f"───────────────────\n"  # Тонкий разделитель (опционально)
+            f"<b>🗓 Записи на занятия:</b>\n"
         )
+
         lesson_buttons = []
         if user.get('lessons'):
-            profile_text += '\n<b>🗓 Записи на занятия:</b>\n'
             for lesson in user['lessons']:
-                profile_text += f"• {lesson['date']} — {lesson['title']}\n"
-                lesson_buttons.append([InlineKeyboardButton(text=f"❌ Отменить: {lesson['title']}", callback_data=f"cancel_lesson|{lesson['date']}")
-                                       ])
+                link = lesson.get('link')
+                # Прячем длинную ссылку в аккуратную кликабельную фразу
+                link_str = f" | 🔗 <a href='{link}'>Перейти</a>" if link else ""
+
+                profile_text += f"\n• <b>{lesson['title']}</b>\n  📅 <i>{lesson['date']}</i>{link_str}\n"
+
+                lesson_buttons.append([
+                    InlineKeyboardButton(
+                        text=f"❌ Отменить: {lesson['title']}",
+                        callback_data=f"cancel_lesson|{lesson['date']}"
+                    )
+                ])
         else:
-            profile_text +=f'\n🗓 Вы пока не записаны на занятия.'
+            profile_text += f"\n<i>Вы пока не записаны на занятия.</i>"
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text='✏️ Редактировать', callback_data="edit_profile")]]+
@@ -398,8 +409,9 @@ async def save_new_value(message: Message, state: FSMContext):
         except httpx.RequestError:
             await message.answer('⚠️ Ошибка соединения с сервером.', reply_markup=ReplyKeyboardRemove())
             await state.clear()
+
 # Admin панель===============================================================================
-# Admin панель ===============================================================================
+
 
 @router.message(Command("admin"), IsAdmin())
 async def admin_panel(message: Message):
@@ -489,7 +501,7 @@ async def admin_list_lessons(callback: CallbackQuery):
     await callback.answer()
 
 
-# 2. Детальная карточка выбранного урока + список участников
+# 2. Детальная карточка выбранного урока + список участников + функция редактирования урока
 @router.callback_query(F.data.startswith("admin_view_lesson"), IsAdmin())
 async def admin_view_lesson_detail(callback: CallbackQuery):
     lesson_id = callback.data.split(":")[1]
@@ -503,11 +515,15 @@ async def admin_view_lesson_detail(callback: CallbackQuery):
 
     lesson = data.get("lesson")
     users = lesson.get("users", [])
+    lesson_link = lesson.get("link")
+
+    # Выносим ссылку на новую строку, чтобы Telegram корректно сгенерировал превью
+    link_section = f"\n🔗 Ссылка:\n{lesson_link}" if lesson_link else "\n🔗 Ссылка: нет"
 
     text = (
         f"<b>📅 {lesson['title']} — {lesson['date']}</b>\n"
-        f"🪑 Доступно мест: {lesson['spots']}\n"
-        f"🔗 Ссылка: {lesson.get('link') or 'нет'}\n\n"
+        f"🪑 Доступно мест: {lesson['spots']}"
+        f"{link_section}\n\n"
     )
 
     if not users:
@@ -521,13 +537,69 @@ async def admin_view_lesson_detail(callback: CallbackQuery):
             text += f"• <b>{name}</b> (ID: <code>{tg_id}</code>) | {email}\n"
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Редактировать урок", callback_data=f"admin_edit_lesson:{lesson['id']}")],
         [InlineKeyboardButton(text="❌ Удалить этот урок", callback_data=f"admin_delete_lesson:{lesson['id']}")],
         [InlineKeyboardButton(text="« Назад к списку уроков", callback_data="admin_check")]
     ])
 
-    await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    await callback.message.edit_text(
+        text,
+        reply_markup=kb,
+        parse_mode="HTML",
+        link_preview_options=LinkPreviewOptions(is_disabled=False) # Явно разрешаем показ превью
+    )
+    await callback.answer()
+# Запуск процесса редактирования урока
+
+@router.callback_query(F.data.startswith("admin_edit_lesson"), IsAdmin())
+async def admin_edit_lesson_start(callback: CallbackQuery, state: FSMContext):
+    lesson_id = callback.data.split(":")[1]
+    await state.update_data(editing_lesson_id=lesson_id)
+
+    await callback.message.answer("Введите новое название урока:")
+    await state.set_state(EditLesson.title)
     await callback.answer()
 
+
+@router.message(EditLesson.title, IsAdmin())
+async def edit_lesson_title(message: Message, state: FSMContext):
+    await state.update_data(title=message.text.strip())
+    await message.answer("Введите новую дату урока (в формате ГГГГ-ММ-ДД):")
+    await state.set_state(EditLesson.date)
+
+
+@router.message(EditLesson.date, IsAdmin())
+async def edit_lesson_date(message: Message, state: FSMContext):
+    await state.update_data(date=message.text.strip())
+    await message.answer("Сколько доступно мест?")
+    await state.set_state(EditLesson.spots)
+
+
+@router.message(EditLesson.spots, IsAdmin())
+async def edit_lesson_spots(message: Message, state: FSMContext):
+    if not message.text.isdigit():
+        await message.answer("Введите количество мест числом:")
+        return
+    await state.update_data(spots=int(message.text.strip()))
+    await message.answer("Введите новую ссылку на урок:")
+    await state.set_state(EditLesson.link)
+
+
+@router.message(EditLesson.link, IsAdmin())
+async def edit_lesson_link(message: Message, state: FSMContext):
+    await state.update_data(link=message.text.strip())
+    data = await state.get_data()
+    lesson_id = data.pop("editing_lesson_id")
+
+    async with httpx.AsyncClient() as client:
+        res = await client.put(f"{API_URL}/admin/lesson/{lesson_id}", json=data)
+
+        if res.status_code == 200:
+            await message.answer("✅ Урок успешно обновлен!")
+        else:
+            await message.answer("❌ Ошибка при обновлении урока.")
+
+    await state.clear()
 
 # 3. Обработчик удаления урока
 @router.callback_query(F.data.startswith("admin_delete_lesson"), IsAdmin())

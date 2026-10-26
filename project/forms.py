@@ -18,3 +18,8 @@ class AddLesson(StatesGroup):
     spots = State()
     link = State()
 
+class EditLesson(StatesGroup):
+    title = State()
+    date = State()
+    spots = State()
+    link = State()

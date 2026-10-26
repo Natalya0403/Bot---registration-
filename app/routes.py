@@ -15,7 +15,8 @@ from db.crud import (
     get_today_lessons,
     get_all_lessons_with_users,
     get_lesson_by_id,
-    delete_lesson_by_id
+    delete_lesson_by_id,
+    update_lesson_by_id
 )
 
 router = APIRouter()
@@ -143,6 +144,24 @@ async def admin_delete_lesson(lesson_id: int):
         status_code=status.HTTP_404_NOT_FOUND,
         detail="Урок не найден или уже был удален"
     )
+# Эндпоинт редактирования урока
+
+@router.put("/admin/lesson/{lesson_id}")
+async def admin_edit_lesson(lesson_id: int, data: LessonCreate):
+    lesson = await update_lesson_by_id(
+        lesson_id=lesson_id,
+        title=data.title,
+        date_obj=data.date,
+        spots=data.spots,
+        link=data.link
+    )
+    if lesson:
+        return {"status": "ok", "message": "Урок успешно обновлен"}
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Урок не найден"
+    )
+
 # --- Запись и Отмена ---
 
 @router.post("/lesson/register/{lesson_id}/{user_id}")
@@ -183,7 +202,9 @@ async def get_user_id(user_id: int):
         )
 
     lessons_data = [
-        {'title': l.title, 'date': l.date.isoformat()}
+        {'title': l.title,
+        'date': l.date.isoformat(),
+        'link': l.link}
         for l in getattr(user, 'lessons', [])
     ]
 
@@ -255,3 +276,4 @@ async def edit_user(user_id: int, data: Dict[str, Any]):
     if not user:
         return {'status': 'fail'}
     return {'status': 'ok'}
+

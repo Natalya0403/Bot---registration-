@@ -246,4 +246,19 @@ async def update_user(user_id: int, field: str, value: str):
 
         return user
 
-    
+async def update_lesson_by_id(lesson_id: int, title: str, date_obj: date, spots: int, link: str):
+    async with async_session() as session:
+        result = await session.execute(select(Lesson).where(Lesson.id == lesson_id))
+        lesson = result.scalar_one_or_none()
+
+        if not lesson:
+            return None
+
+        lesson.title = title
+        lesson.date = date_obj
+        lesson.spots = spots
+        lesson.link = link
+
+        await session.commit()
+        await session.refresh(lesson)
+        return lesson
