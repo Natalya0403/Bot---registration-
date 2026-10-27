@@ -15,10 +15,7 @@ class User(Base):
   id = Column(Integer, primary_key=True, autoincrement=True)
   name = Column(String, nullable=False)
   user_id = Column(BigInteger, nullable=False)#unique=True если захотим сделать уникальным
-  email = Column(String, nullable=False, unique=True)
-  city = Column(String, nullable=False)
-  birth = Column(String, nullable=False)# не удивляться что string
-  phone = Column(String, nullable=False)
+
 
   # Используем lambda, чтобы дата вычислялась при создании каждого объекта:
   created_at = Column(

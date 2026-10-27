@@ -11,38 +11,24 @@ from db.models import User, Lesson
 
 # --- ФУНКЦИИ ДЛЯ РАБОТЫ С ПОЛЬЗОВАТЕЛЕМ ---
 
-async def create_user(user_data: UserModel):
+async def create_user(user_data):
   async with async_session() as session:
     stmt = select(User).where(User.user_id == user_data.user_id)
     result = await session.execute(stmt)
     user = result.scalar_one_or_none()
 
-    # В зависимости от типа поля birth в вашей модели БД:
-    # 1. Если в БД поле birth это String: конвертируем обратно в строку ISO "YYYY-MM-DD"
-    #    birth_val = user_data.birth.strftime("%Y-%m-%d") (или "%d.%m.%Y")
-    # 2. Если в БД поле birth это Date: передаем как есть (user_data.birth)
-
     if user:
       # Обновляем существующего пользователя
       user.name = user_data.name
-      user.email = user_data.email
-      user.city = user_data.city
-      user.birth = str(user_data.birth)  # Превращаем date обратно в str, если в БД это String
-      user.phone = user_data.phone
+
     else:
-      # Создаем нового пользователя
+      # Создаем нового пользователя (передаем и user_id, и обязательное name)
       user = User(
           user_id=user_data.user_id,
           name=user_data.name,
-          email=user_data.email,
-          city=user_data.city,
-          birth=str(
-              user_data.birth
-          ),  # Превращаем date обратно в str, если в БД это String
-          phone=user_data.phone,
       )
+      session.add(user) # session.add нужен только для новых объектов
 
-    session.add(user)
     await session.commit()
     await session.refresh(user)
     return user
@@ -229,7 +215,7 @@ async def get_user_by_id(user_id: int):
         return result.scalar_one_or_none()
 
 
-async def update_user(user_id: int, field: str, value: str):
+async def update_user_name(user_id: int, new_name: str):
     async with async_session() as session:
         result = await session.execute(
             select(User).where(User.user_id == user_id)
@@ -238,12 +224,9 @@ async def update_user(user_id: int, field: str, value: str):
         if user is None:
             return None
 
-        # Проверяем, что обновляемое поле существует у пользователя
-        if hasattr(user, field):
-            setattr(user, field, value)
-            await session.commit()
-            await session.refresh(user)
-
+        user.name = new_name
+        await session.commit()
+        await session.refresh(user)
         return user
 
 async def update_lesson_by_id(lesson_id: int, title: str, date_obj: date, spots: int, link: str):

@@ -10,7 +10,7 @@ from db.crud import (
     reduce_spots,
     get_all_lesson,
     get_user_by_id,
-    update_user,
+    update_user_name,
     cancel_user_lesson,
     get_today_lessons,
     get_all_lessons_with_users,
@@ -25,6 +25,7 @@ router = APIRouter()
 # --- Pydantic Схемы ---
 
 class UserModel(BaseModel):
+  user_id: int
   name: str = Field(
       ...,
       min_length=2,  # Минимум 2 символа
@@ -32,42 +33,6 @@ class UserModel(BaseModel):
       pattern=r"^[А-Яа-яA-Za-zA-Яa-яЁё\s\-]+$",  # ТОЛЬКО буквы, пробелы и дефисы
       description="Имя пользователя",
   )
-  email: EmailStr = Field(..., description="Электронная почта")
-  city: str = Field(
-      ..., min_length=2, max_length=50, description="Город проживания"
-  )
-  birth: date = Field(..., description="Дата рождения в формате ДД.ММ.ГГГГ")
-  phone: str = Field(..., description="Номер телефона")
-  user_id: int = Field(..., description="Telegram ID пользователя")
-
-  # 1. Валидатор для даты рождения: превращает строку "ДД.ММ.ГГГГ" в объект date
-  @field_validator("birth", mode="before")
-  @classmethod
-  def parse_birth_date(cls, value: Any) -> Any:
-    if isinstance(value, str):
-      try:
-        return datetime.strptime(value.strip(), "%d.%m.%Y").date()
-      except ValueError:
-        raise ValueError(
-            "Дата рождения должна быть в формате ДД.ММ.ГГГГ (например,"
-            " 01.01.2000)"
-        )
-    return value
-
-  # 2. Валидатор для телефона: очищает мусор и проверяет длину
-  @field_validator("phone", mode="before")
-  @classmethod
-  def validate_phone(cls, value: str) -> str:
-    if not isinstance(value, str):
-      raise ValueError("Телефон должен быть строкой")
-
-    # Убираем всё, кроме цифр (плюсы, скобки, тире, пробелы)
-    clean_phone = re.sub(r"\D", "", value)
-
-    if not (10 <= len(clean_phone) <= 15):
-      raise ValueError("Номер телефона должен содержать от 10 до 15 цифр.")
-
-    return clean_phone
 
 
 class LessonCreate(BaseModel):
@@ -202,7 +167,8 @@ async def get_user_id(user_id: int):
         )
 
     lessons_data = [
-        {'title': l.title,
+        {'id': l.id,
+        'title': l.title,
         'date': l.date.isoformat(),
         'link': l.link}
         for l in getattr(user, 'lessons', [])
@@ -210,36 +176,30 @@ async def get_user_id(user_id: int):
 
     return {
         "name": user.name,
-        "email": user.email,
-        "city": user.city,
-        "birth": user.birth,
-        "phone": user.phone,
         "lessons": lessons_data
     }
 
 
 @router.put("/users/{user_id}")
 async def edit_user(user_id: int, data: Dict[str, Any]):
-    if not data:
+    new_name = data.get("name")
+
+    if not new_name or len(new_name.strip()) < 2:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Тело запроса не должно быть пустым"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Имя должно содержать не менее 2 символов."
         )
 
-    # 1. Получаем текущие данные пользователя из БД, чтобы собрать полный объект
-    current_user = await get_user_by_id(user_id)
-    if not current_user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+    # Обновляем имя в базе данных
+    user = await update_user_name(user_id, new_name)  # или ваша функция обновления
 
-    # 2. Собираем полный словарь данных пользователя, заменяя обновляемое поле
-    user_dict = {
-        "user_id": current_user.user_id,
-        "name": current_user.name,
-        "email": current_user.email,
-        "city": current_user.city,
-        "birth": current_user.birth,
-        "phone": current_user.phone,
-    }
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Пользователь не найден"
+        )
+
+    return {"status": "ok", "name": user.name}
 
     # Обновляем то поле, которое прислал бот
     field, value = list(data.items())[0]
@@ -271,7 +231,7 @@ async def edit_user(user_id: int, data: Dict[str, Any]):
                 detail=error_msg
             )
     # 4. Если валидация прошла успешно — обновляем поле в базе через CRUD
-    user = await update_user(user_id, field, validated_data.model_dump()[field])
+    user = await update_user_name(user_id, field, validated_data.model_dump()[field])
 
     if not user:
         return {'status': 'fail'}

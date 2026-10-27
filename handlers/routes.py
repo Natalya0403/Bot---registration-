@@ -1,7 +1,5 @@
-import logging
 import re
 import os
-import json
 from pathlib import Path
 import httpx
 from dotenv import load_dotenv
@@ -12,7 +10,7 @@ from aiogram.types import (Message, FSInputFile, ReplyKeyboardMarkup, KeyboardBu
                            ReplyKeyboardRemove)
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, BaseFilter
-from project.forms import Registration, EditProfile, AddLesson, EditLesson
+from forms import Registration, EditProfile, AddLesson, EditLesson
 from aiogram.types import LinkPreviewOptions
 
 
@@ -30,7 +28,7 @@ API_URL = raw_api_url.rstrip('/')
 
 # Точный путь к файлу: project/media/foto.jpg
 BASE_DIR = Path(__file__).resolve().parent
-PHOTO_PATH = BASE_DIR / "media" / "foto.jpg"
+PHOTO_PATH = BASE_DIR / "media" / "photo.jpg"
 
 router = Router()
 
@@ -60,7 +58,7 @@ async def send_welcome(message: Message, state: FSMContext):
         foto = FSInputFile(PHOTO_PATH)
         await message.answer_photo(
             photo=foto,
-            caption='👋 Привет! Это бот для записи на занятие в школу программирования IT_Start.\n\nЧтобы зарегистрироваться ответьте на несколько вопросов.\n\nПоехали! Как вас зовут?',
+            caption='👋 Привет! Это бот для записи на занятие в школу программирования <b>IT-Start</b>.\n\nЧтобы зарегистрироваться напишите ваше имя.',
         reply_markup=cancel_keyboard)
     else:
         await message.answer(
@@ -84,124 +82,19 @@ async def get_name(message: Message, state: FSMContext):
         return
 
     await state.update_data(name=name)
-    await message.answer(f'🤝 Отлично, {name}!\nТеперь введи свой email:', reply_markup=cancel_keyboard)
-    await state.set_state(Registration.email)
+    data = await state.get_data()
+    name = data.get("name")
+    user_data = {
+        "user_id": message.from_user.id,
+        "name": name
+        }
 
+    async with httpx.AsyncClient() as client:
+        await client.post(f"{API_URL}/user/add", json=user_data)
 
-@router.message(Registration.email, ~F.text.startswith("/"))
-async def get_email(message: Message, state: FSMContext):
-    email = message.text.strip()
-    if '@' not in email or '.' not in email:
-        await message.answer('⚠️ Это не похоже на email. Попробуйте еще раз.', reply_markup=cancel_keyboard)
-        return
-    await state.update_data(email=email)
-    await message.answer('🏙️ Супер! Из какого ты города?', reply_markup=cancel_keyboard)
-    await state.set_state(Registration.city)
+    await state.clear()
+    await message.answer(f"👋 Приятно познакомиться, {name}! Регистрация завершена.\n\n 👉 Нажмите /calendar, чтобы записаться на занятия.")
 
-
-@router.message(Registration.city, ~F.text.startswith("/"))
-async def get_city(message: Message, state: FSMContext):
-    city = message.text.strip()
-    await state.update_data(city=city)
-    await message.answer(
-        '🎂 Спасибо!\nОсталось еще немного...\nКогда у тебя день рождения?\nВведите дату в формате: 01.01.2000', reply_markup=cancel_keyboard
-    )
-    await state.set_state(Registration.birth)
-
-
-@router.message(Registration.birth, ~F.text.startswith("/"))
-async def get_birth(message: Message, state: FSMContext):
-    birth = message.text.strip()
-    if len(birth) != 10 or birth.count('.') != 2:
-        await message.answer('📅 Введите дату рождения в формате: 01.01.2000', reply_markup=cancel_keyboard)
-        return
-    await state.update_data(birth=birth)
-
-    await message.answer('📱 И финальный шаг!\nВведите пожалуйста номер телефона:', reply_markup=cancel_keyboard)
-    await state.set_state(Registration.phone)
-
-
-@router.message(Registration.phone, ~F.text.startswith("/"))
-async def get_phone(message: Message, state: FSMContext):
-    phone_raw = message.text.strip()
-    clean_phone = re.sub(r'\D', '', phone_raw)
-
-    if len(clean_phone) < 10 or len(clean_phone) > 15:
-        await message.answer('❌ Введите корректный номер телефона', reply_markup=cancel_keyboard)
-        return
-
-    await state.update_data(phone=clean_phone)
-
-    # Получаем скомпонованный словарь из FSM
-    user_data = await state.get_data()
-
-    summary = (
-        "🔎 Проверь данные перед регистрацией:\n\n"
-        f"👤 Имя: {user_data['name']}\n"
-        f"📧 Email: {user_data['email']}\n"
-        f"🏙️ Город: {user_data['city']}\n"
-        f"🎂 Дата рождения: {user_data['birth']}\n"
-        f"📞 Телефон: {user_data['phone']}\n\n"
-        "✅ Всё верно?"
-    )
-
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Да, всё верно ✅")],
-            [KeyboardButton(text="Заполнить заново ❌")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-    await message.answer(summary, reply_markup=keyboard)
-    await state.set_state(Registration.confirm)
-
-
-@router.message(Registration.confirm)
-async def get_confirm(message: Message, state: FSMContext):
-    if message.text == 'Да, всё верно ✅':
-        user_data = await state.get_data()
-        user_data['user_id'] = message.from_user.id
-
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(f'{API_URL}/user/add', json=user_data)
-
-                if response.status_code in (200, 201):
-                    await message.answer('🎉 Спасибо за регистрацию! Мы с вами свяжемся.',
-                                         reply_markup=ReplyKeyboardRemove())
-                    await state.clear()
-
-                elif response.status_code == 422:
-                    # Ловим ошибку валидации Pydantic с бэкенда
-                    try:
-                        err_data = response.json()
-                        detail = err_data.get('detail', 'Неверный формат данных.')
-                    except Exception:
-                        detail = 'Проверьте правильность введенных данных.'
-
-                    await message.answer(
-                        f'⚠️ Ошибка проверки данных: {detail}\n\nПожалуйста, начните регистрацию заново с команды /start',
-                        reply_markup=ReplyKeyboardRemove()
-                    )
-                    await state.clear()
-
-                else:
-                    await message.answer(f'⚠️ Ошибка сервера ({response.status_code}). Попробуйте позже.',
-                                         reply_markup=ReplyKeyboardRemove())
-                    await state.clear()
-
-            except httpx.RequestError:
-                await message.answer('⚠️ Не удалось связаться с сервером API. Проверьте, запущен ли FastAPI.',
-                                     reply_markup=ReplyKeyboardRemove())
-                await state.clear()
-
-    elif message.text == 'Заполнить заново ❌':
-        await message.answer("Окей! Давай начнём заново 🌀\nНапиши своё имя:", reply_markup=cancel_keyboard)
-        await state.set_state(Registration.name)
-    else:
-        # Если пользователь написал что-то постороннее на этапе подтверждения
-        await message.answer("Пожалуйста, выберите вариант с помощью кнопок ниже 👇")
 
 @router.message(Command("calendar"))
 async def show_calendar(message: Message, state: FSMContext):
@@ -261,10 +154,6 @@ async def profile(message: Message):
         profile_text = (
             f"<b>👤 Личный кабинет</b>\n\n"
             f"<b>Имя:</b> {user['name']}\n"
-            f"<b>📧 Email:</b> {user['email']}\n"
-            f"<b>🏙 Город:</b> {user['city']}\n"
-            f"<b>🎂 Дата рождения:</b> {user['birth']}\n"
-            f"<b>📱 Телефон:</b> {user['phone']}\n\n"  # Пустая строка перед записями
             f"───────────────────\n"  # Тонкий разделитель (опционально)
             f"<b>🗓 Записи на занятия:</b>\n"
         )
@@ -276,8 +165,10 @@ async def profile(message: Message):
                 # Прячем длинную ссылку в аккуратную кликабельную фразу
                 link_str = f" | 🔗 <a href='{link}'>Перейти</a>" if link else ""
 
-                profile_text += f"\n• <b>{lesson['title']}</b>\n  📅 <i>{lesson['date']}</i>{link_str}\n"
+                # Исправлен синтаксис вывода заголовка и даты урока
+                profile_text += f"\n<b>{lesson['title']}</b>\n  📅 <i>{lesson['date']}</i>{link_str}\n"
 
+                # Передаем реальную дату урока в callback_data для отмены
                 lesson_buttons.append([
                     InlineKeyboardButton(
                         text=f"❌ Отменить: {lesson['title']}",
@@ -288,7 +179,7 @@ async def profile(message: Message):
             profile_text += f"\n<i>Вы пока не записаны на занятия.</i>"
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='✏️ Редактировать', callback_data="edit_profile")]]+
+            [InlineKeyboardButton(text='✏️ Редактировать', callback_data="edit_profile")]] +
             lesson_buttons)
 
         await message.answer(profile_text, reply_markup=keyboard, parse_mode="HTML")
@@ -309,96 +200,52 @@ async def cancel_lesson_callback(callback: CallbackQuery):
 
     await callback.answer()
 #=========================================================================================
+# 1. Ловим нажатие кнопки "Редактировать" из профиля
 @router.callback_query(F.data == "edit_profile")
-async def choose_field(callback: CallbackQuery):
-    buttons = [
-        [InlineKeyboardButton(text="Имя", callback_data="edit_field|name")],
-        [InlineKeyboardButton(text="Email", callback_data="edit_field|email")],
-        [InlineKeyboardButton(text="Город", callback_data="edit_field|city")],
-        [InlineKeyboardButton(text="Дата рождения", callback_data="edit_field|birth")],
-        [InlineKeyboardButton(text="Телефон", callback_data="edit_field|phone")],
-    ]
-    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-    await callback.message.answer('Что вы хотите изменить?', reply_markup=kb)
+async def start_edit_name(callback: CallbackQuery, state: FSMContext):
+    await callback.message.answer(
+        '✏️ Введите новое имя (минимум 2 символа, только буквы):',
+        reply_markup=cancel_keyboard
+    )
+    await state.set_state(EditProfile.new_name)
     await callback.answer()
 
 
-# Описываем читаемые названия полей в отдельном словаре
-FIELD_NAMES = {
-    "name": "имя",
-    "email": "email",
-    "city": "город",
-    "birth": "дату рождения",
-    "phone": "номер телефона",
-}
+# 2. Принимаем новое имя от пользователя
+@router.message(EditProfile.new_name, ~F.text.startswith("/"))
+async def save_new_name(message: Message, state: FSMContext):
+    new_name = message.text.strip()
 
-
-@router.callback_query(F.data.startswith("edit_field"))
-async def edit_field(callback: CallbackQuery, state: FSMContext):
-    # Разделяем Callback Data (ожидается формат "edit_field|name")
-    parts = callback.data.split("|")
-    if len(parts) < 2:
-        await callback.answer("Ошибка: неверный формат данных", show_alert=True)
-        return
-
-    field = parts[1]
-    await state.update_data(field=field)
-
-    target_name = FIELD_NAMES.get(field, 'новое значение')
-
-    await callback.message.answer(f'Введите новое значение для поля ({target_name}):')
-    await state.set_state(EditProfile.new_value)
-    await callback.answer()
-
-
-@router.message(EditProfile.new_value)
-async def save_new_value(message: Message, state: FSMContext):
-    data = await state.get_data()
-    field = data.get('field')
-
-    if not field:
+    # Клиентская валидация (дублирует строгие правила бэкенда)
+    if len(new_name) < 2 or not re.match(r"^[А-Яа-яA-Za-zЁё\s\-]+$", new_name):
         await message.answer(
-            'Произошла ошибка сессии. Пожалуйста, выберите поле заново.',
-            reply_markup=ReplyKeyboardRemove()
+            '⚠️ Имя должно содержать минимум 2 буквы и состоять только из букв. Попробуйте еще раз:',
+            reply_markup=cancel_keyboard
         )
-        await state.clear()
         return
 
-    value = message.text.strip() if message.text else ''
     user_id = message.from_user.id
+    payload = {"name": new_name}
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            # 1. Получаем текущий профиль
-            res_get = await client.get(f'{API_URL}/users/{user_id}')
-            if res_get.status_code != 200:
-                await message.answer('Не удалось получить данные профиля.', reply_markup=ReplyKeyboardRemove())
-                await state.clear()
-                return
+            # Отправляем PUT-запрос с новым именем на бэкенд
+            res = await client.put(f'{API_URL}/users/{user_id}', json=payload)
 
-            user_data = res_get.json()
-            user_data[field] = value
-            user_data['user_id'] = user_id
-
-            # 2. Отправляем обновленную пачку данных
-            res_put = await client.put(f'{API_URL}/users/{user_id}', json=user_data)
-
-            if res_put.status_code == 200:
-                await message.answer('🎉 Профиль успешно обновлен!', reply_markup=ReplyKeyboardRemove())
+            if res.status_code == 200:
+                await message.answer('🎉 Имя успешно обновлено!', reply_markup=ReplyKeyboardRemove())
                 await state.clear()
 
-            elif res_put.status_code == 422:
-                # Пытаемся забрать детальный текст ошибки от Pydantic/FastAPI
+            elif res.status_code == 422:
+                # Если бэкенд вернул ошибку валидации
                 try:
-                    err_data = res_put.json()
+                    err_data = res.json()
                     detail = err_data.get('detail', 'Неверный формат данных.')
                 except Exception:
                     detail = 'Проверьте правильность введенных данных.'
 
-                # Выводим ошибку, но состояние НЕ очищаем (!),
-                # чтобы пользователь мог сразу отправить правильный вариант
                 await message.answer(
-                    f'⚠️ Ошибка проверки: {detail}\n\nПожалуйста, введите корректное значение заново:',
+                    f'⚠️ Ошибка проверки: {detail}\n\nПожалуйста, введите корректное имя заново:',
                     reply_markup=cancel_keyboard
                 )
 

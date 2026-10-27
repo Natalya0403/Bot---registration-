@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="GBrowserService"><![CDATA[{
+  "history": [
+    {
+      "name": "GBrowser - IntelliJ IDEs Plugin | Marketplace",
+      "url": "https://plugins.jetbrains.com/plugin/14458-gbrowser"
+    },
+    {
+      "name": "‎Google Gemini",
+      "url": "https://gemini.google.com/app/4626faefc4ad49c4"
+    },
+    {
+      "name": "Google Gemini",
+      "url": "https://gemini.google.com/app"
+    },
+    {
+      "name": "Sign in - Google Accounts",
+      "url": "https://accounts.google.com/v3/signin/identifier?continue=https://gemini.google.com/signin?continue%3Dhttps://gemini.google.com/app&followup=https://gemini.google.com/signin?continue%3Dhttps://gemini.google.com/app&passive=1209600&flowName=GlifWebSignIn&flowEntry=ServiceLogin&dsh=S1140855057:1792478498982087"
+    },
+    {
+      "name": "Welcome",
+      "url": "https://accounts.google.com/v3/signin/challenge/pwd?TL=ADG-GRSsxKzBP1kljW7u1FZD_edSIcj6ZTRE54odNZULtAPyzHFc4Hnlz22ihbaf&checkConnection=youtube%3A335&checkedDomains=youtube&cid=2&continue=https%3A%2F%2Fgemini.google.com%2Fsignin%3Fcontinue%3Dhttps%3A%2F%2Fgemini.google.com%2Fapp&dsh=S1140855057%3A1792478498982087&flowEntry=ServiceLogin&flowName=GlifWebSignIn&followup=https%3A%2F%2Fgemini.google.com%2Fsignin%3Fcontinue%3Dhttps%3A%2F%2Fgemini.google.com%2Fapp&pstMsg=1"
+    },
+    {
+      "name": "Google Account",
+      "url": "https://gds.google.com/web/landing?ep=p&gdsid=1291431484&tda=CAA&gm3e=false&authuser=0&hl=ru&continue=https://accounts.google.com/ServiceLogin?continue%3Dhttps://gemini.google.com/signin?continue%253Dhttps://gemini.google.com/app%26hl%3Dru%26authuser%3D0%26passive%3Dtrue%26sarp%3D1%26aodrpl%3D1%26checkedDomains%3Dyoutube%26checkConnection%3Dyoutube:335%26pstMsg%3D1&rapt=AEjHL4MRieZY_Ft32qdh5ocskq1FfgCGa5Wk484BdJw2fgGRq-6ITeOmJD_JnQTSC-VR98j5XQy5o5r8hplIUxPW17Ul2jLnCA&pli=1"
+    },
+    {
+      "name": "Укажите домашний адрес",
+      "url": "https://gds.google.com/web/stalehomeaddress?cardIndex=0&hl=ru&authuser=0&tda=CAA&gdsid=1291431484&continue=https%3A%2F%2Faccounts.google.com%2FServiceLogin%3Fcontinue%3Dhttps%3A%2F%2Fgemini.google.com%2Fsignin%3Fcontinue%253Dhttps%3A%2F%2Fgemini.google.com%2Fapp%26hl%3Dru%26authuser%3D0%26passive%3Dtrue%26sarp%3D1%26aodrpl%3D1%26checkedDomains%3Dyoutube%26checkConnection%3Dyoutube%3A335%26pstMsg%3D1&rapt=AEjHL4MRieZY_Ft32qdh5ocskq1FfgCGa5Wk484BdJw2fgGRq-6ITeOmJD_JnQTSC-VR98j5XQy5o5r8hplIUxPW17Ul2jLnCA&ep=p"
+    },
+    {
+      "name": "Укажите домашний адрес",
+      "url": "https://gds.google.com/web/stalehomeaddress?cardIndex=0&hl=ru&authuser=0&tda=CAA&gdsid=1291431484&continue=https%3A%2F%2Faccounts.google.com%2FServiceLogin%3Fcontinue%3Dhttps%3A%2F%2Fgemini.google.com%2Fsignin%3Fcontinue%253Dhttps%3A%2F%2Fgemini.google.com%2Fapp%26hl%3Dru%26authuser%3D0%26passive%3Dtrue%26sarp%3D1%26aodrpl%3D1%26checkedDomains%3Dyoutube%26checkConnection%3Dyoutube%3A335%26pstMsg%3D1&rapt=AEjHL4MRieZY_Ft32qdh5ocskq1FfgCGa5Wk484BdJw2fgGRq-6ITeOmJD_JnQTSC-VR98j5XQy5o5r8hplIUxPW17Ul2jLnCA&ep=p&asp=EgQIMhAC"
+    },
+    {
+      "name": "Добавьте фото профиля",
+      "url": "https://gds.google.com/web/pgc?cardIndex=1&hl=ru&authuser=0&tda=CAA&gdsid=1291431484&continue=https%3A%2F%2Faccounts.google.com%2FServiceLogin%3Fcontinue%3Dhttps%3A%2F%2Fgemini.google.com%2Fsignin%3Fcontinue%253Dhttps%3A%2F%2Fgemini.google.com%2Fapp%26hl%3Dru%26authuser%3D0%26passive%3Dtrue%26sarp%3D1%26aodrpl%3D1%26checkedDomains%3Dyoutube%26checkConnection%3Dyoutube%3A335%26pstMsg%3D1&asp=EgQIMhAC&rapt=AEjHL4MRieZY_Ft32qdh5ocskq1FfgCGa5Wk484BdJw2fgGRq-6ITeOmJD_JnQTSC-VR98j5XQy5o5r8hplIUxPW17Ul2jLnCA&ep=p"
+    }
+  ]
+}]]></component>
+</project>
