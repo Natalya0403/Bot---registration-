@@ -23,7 +23,7 @@ load_dotenv()
 
 TOKEN = os.getenv("BOT_TOKEN")
 # Сюда подставится ваша публичная ссылка от ngrok (или домен)
-WEBHOOK_HOST = os.getenv("WEBHOOK_HOST", "https://landmass-unclaimed-gathering.ngrok-free.dev").strip()
+WEBHOOK_HOST = os.getenv("API_URL", "https://bot-registration-n715.onrender.com").strip()
 WEBHOOK_PATH = f"/webhook/{TOKEN}"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
